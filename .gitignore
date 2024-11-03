@@ -1,2 +1,5 @@
-notebooks/logs
+**/logs
+models/
+**/.cache
+**/__pycache__
 
