@@ -1,0 +1,19 @@
+version: "3.9"
+services:
+  llama:
+    image: llama-cpp-docker
+    environment:
+      - GGML_CUDA_NO_PINNED=1
+      - LLAMA_CTX_SIZE=2048
+      - LLAMA_MODEL=/models/llama-2-13b-chat.Q5_K_M.gguf
+      - LLAMA_N_GPU_LAYERS=99
+    volumes:
+      - ./models:/models
+    ports:
+      - target: 8080
+        published: 8080
+        mode: host
+
+networks:
+  custom_network:
+    driver: bridge

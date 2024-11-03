@@ -1,0 +1,11 @@
+pymupdf
+pydantic
+pillow
+pymupdf4llm
+langchain-text-splitters
+llama-index
+llama-index-vector-stores-qdrant
+llama-index-embeddings-huggingface
+pre-commit
+
+
