@@ -25,10 +25,11 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
-
-
-
-
+# Set up stream handler to print logs to the terminal
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.INFO)
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
 
 qdrant_url = "http://0.0.0.0:6333"
 model_name = "BAAI/bge-m3"
@@ -38,13 +39,29 @@ sllm_model_url = 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/re
 
 embed_model = HuggingFaceEmbedding(model_name=model_name, max_length=EMBED_SIZE) # FIXME Changel max_length to consider high memory usage with bge-m3
 LLM_PROMPT="""
-TEST
+## Role:
+- You are a **Document Expert** who provides answer based solely on the provided reference.
+
+## Instructions:
+- Check if the references are relevant to the user query.
+- If the retrieved information is relevant, provide the answer.
+- If the retrieved information is not relevant, or the question does not make sense given the retrieved information, reply that 'It cannot be answered based on the material'.
+- Be Precise and provide only the answer, no other comments.
+- Please provide a gramatically complete responses with ending punctuations.
+- Let’s think step by step.
+
+## References:
+{context_str}
+
+## User query: 
+{query_str}
 """
 
+app = FastAPI()
 
 
 async def text_streamer(streamer, extra_text: str = ""):
-    async for new_text in streamer:
+    for new_text in streamer:
         yield new_text.delta  # Yielding the streamed text
     if extra_text:
         yield extra_text
@@ -85,14 +102,60 @@ async def parse(file: UploadFile = File(...), index_id: str="files", splitting_t
         assert False
         
     base_retriever = BaseRetriever(index_id=index_id, embed_model=embed_model, qdrant_client=qdrant_client)
-    return base_retriever.add_documents_to_index(documents=documents, index_id='delete')
+    base_retriever.delete_index(index_id=index_id)
+    return base_retriever.add_documents_to_index(documents=documents, index_id=index_id)
             
     
 class AnswerSchema(BaseModel):
     text: Any
     source_nodes: List[Any]
     
+
+import requests
+import json
+
+def llamacpp_inference(prompt, n_predict=128, temperature=0.7, top_p=0.95, stop=None, stream=True):
+    url = "http://localhost:8088/completion"
     
+    payload = {
+        "prompt": prompt,
+        "n_predict": n_predict,
+        "temperature": temperature,
+        "top_p": top_p,
+        "stop": stop if stop else [],
+        "stream": stream
+    }
+    
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
+    # Handle streaming response
+    def handle_streaming():
+        with requests.post(url, headers=headers, json=payload, stream=True) as response:
+            response.raise_for_status()
+            for line in response.iter_lines(decode_unicode=True):
+                if line:  # Filter out keep-alive lines
+                    try:
+                        # Remove "data: " prefix and parse JSON
+                        data = json.loads(line[6:])
+                        yield data.get("content", "")  # Yield the "content" field
+                    except json.JSONDecodeError:
+                        print("Failed to decode JSON:", line)
+
+    # Handle non-streaming response
+    def handle_non_streaming():
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        return result.get('content', '')
+
+    if stream:
+        return handle_streaming()
+    else:
+        return handle_non_streaming()
+    
+
 @app.post("/chat")
 async def chat(request: ChatRequest):
     user_input = request.user_input
@@ -101,29 +164,25 @@ async def chat(request: ChatRequest):
     dense_top_k = request.dense_top_k
     stream =request.stream
     
-    from llama_index.llms.llama_cpp import LlamaCPP
-
-    llm = LlamaCPP(model_url=sllm_model_url, model_kwargs={"n_gpu_layers": 0}, verbose=True)
+    assert llm_text=='local'
     
     base_retriever = BaseRetriever(index_id=index_id, embed_model=embed_model, qdrant_client=qdrant_client)
-    relevant_documents = base_retriever.dense_search(user_input, top_k=dense_top_k)
+    relevant_documents = base_retriever.dense_search(user_input, top_k=dense_top_k, dense_threshold=0.2)
     
     context_str = "\n\n".join([n.node.get_content() for n in relevant_documents])
     passed_llm_prompt = LLM_PROMPT.format(context_str=context_str, query_str=user_input)
     logger.info(f"passed llm prompt: {str(passed_llm_prompt)}")
     if stream:
-        response = llm.stream_complete(
-            passed_llm_prompt
-        )
-        return StreamingResponse(text_streamer(response), media_type="text/plain")
+        streamer = llamacpp_inference(passed_llm_prompt, n_predict=200, temperature=0.3, stream=stream)
+
+        return StreamingResponse(streamer, media_type="text/plain")
     else:
-        response = llm.complete(
-            passed_llm_prompt
-        )
+        response = llamacpp_inference(passed_llm_prompt, n_predict=200, temperature=0.3, stream=stream)
         return {'response': response}
     
         
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=os.getenv('API_PORT', 8090))
     
-    
-
     

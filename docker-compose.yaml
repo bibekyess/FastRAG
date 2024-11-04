@@ -1,18 +1,25 @@
 version: "3.9"
 services:
   llama:
-    image: llama-cpp-docker
-    environment:
-      - GGML_CUDA_NO_PINNED=1
-      - LLAMA_CTX_SIZE=2048
-      - LLAMA_MODEL=/models/llama-2-13b-chat.Q5_K_M.gguf
-      - LLAMA_N_GPU_LAYERS=99
+    image: ghcr.io/ggerganov/llama.cpp:server-cuda
+    command: [
+      "--model_url", "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_0.gguf",
+      "--port", "8080",
+      "--host", "0.0.0.0",
+      "-n", "2048",
+      "--n-gpu-layers", "-1"
+    ]
     volumes:
       - ./models:/models
     ports:
-      - target: 8080
-        published: 8080
-        mode: host
+      - "8088:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
 networks:
   custom_network:

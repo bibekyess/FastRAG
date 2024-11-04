@@ -8,6 +8,9 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.9"
 llama-index-llms-llama-cpp = "^0.2.3"
+fastapi = "^0.115.4"
+uvicorn = "^0.32.0"
+python-multipart = "^0.0.17"
 
 
 [build-system]
