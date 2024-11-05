@@ -9,8 +9,6 @@ services:
       - "7864:7860"
     environment:
       - PARSER_API_URL=http://parser-api:8088/chat
-    networks:
-      - custom_network
     
 
   parser-api:
@@ -18,24 +16,23 @@ services:
       context: .
       dockerfile: Dockerfile_parser_api
     ports:
-      - "8088:8088"
+      - "8089:8090"
     environment:
       - LLAMACPP_URL=http://llamacpp:8088/completion
+      # - API_PORT=8090
       - QDRANT_URL=http://qdrant:6333
-    networks:
-      - custom_network
     
-  # qdrant-dev:
-  #   image: qdrant/qdrant
-  #   ports:
-  #     - "6643:6333"
-  #     - "6344:6334"
-  #   volumes:
-  #     - "./qdrant_storage:/qdrant/storage:z"
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 5G
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6643:6333"
+      - "6344:6334"
+    volumes:
+      - "./qdrant_storage:/qdrant/storage:z"
+    deploy:
+      resources:
+        limits:
+          memory: 5G
 
   llamacpp:
     image: ghcr.io/ggerganov/llama.cpp:server-cuda
@@ -57,7 +54,3 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-
-networks:
-  custom_network:
-    driver: bridge

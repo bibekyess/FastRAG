@@ -54,7 +54,7 @@ class BaseRetriever(BaseModel):
         all_collections = self.qdrant_client.get_collections()
         existing_collections = [i.name for i in list(all_collections.collections) if index_id in i.name]
         if len(existing_collections) == 0:
-            logger.info(f"Cannot delete! Looks like {idx_name} collection is empty")
+            logger.info(f"Cannot delete! Looks like {index_id} collection is empty")
         else:
             for idx_name in existing_collections:
                 if self.qdrant_client.delete_collection(collection_name=f"{idx_name}"):

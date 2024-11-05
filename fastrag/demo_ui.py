@@ -4,7 +4,7 @@ import os
 
 
 def call_chat_api(user_input):
-    url = os.getenv("http://parser-api:8088/chat", "http://localhost:8080/chat")
+    url = os.getenv("PARSER_API_URL", "http://localhost:8080/chat")
     headers = {
         "accept": "application/json",
         "Content-Type": "application/json"

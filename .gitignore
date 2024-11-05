@@ -2,4 +2,5 @@
 models/
 **/.cache
 **/__pycache__
+qdrant_storage/
 
