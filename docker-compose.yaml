@@ -8,7 +8,7 @@ services:
     ports:
       - "7864:7860"
     environment:
-      - PARSER_API_URL=http://parser-api:8088/chat
+      - PARSER_API_URL=http://parser-api:8090/chat
     
 
   parser-api:
@@ -18,7 +18,7 @@ services:
     ports:
       - "8089:8090"
     environment:
-      - LLAMACPP_URL=http://llamacpp:8088/completion
+      - LLAMACPP_URL=http://llamacpp:8080/completion
       # - API_PORT=8090
       - QDRANT_URL=http://qdrant:6333
     
