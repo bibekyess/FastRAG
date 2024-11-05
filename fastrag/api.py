@@ -31,11 +31,10 @@ stream_handler.setLevel(logging.INFO)
 stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 
-qdrant_url = "http://0.0.0.0:6333"
+qdrant_url = os.getenv("QDRANT_URL", "http://0.0.0.0:6333")
 model_name = "BAAI/bge-m3"
 qdrant_client = QdrantClient(url=qdrant_url, timeout=20)
 EMBED_SIZE=512
-sllm_model_url = 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_0.gguf'
 
 embed_model = HuggingFaceEmbedding(model_name=model_name, max_length=EMBED_SIZE) # FIXME Changel max_length to consider high memory usage with bge-m3
 LLM_PROMPT="""
@@ -115,7 +114,7 @@ import requests
 import json
 
 def llamacpp_inference(prompt, n_predict=128, temperature=0.7, top_p=0.95, stop=None, stream=True):
-    url = "http://localhost:8088/completion"
+    url = os.getenv("LLAMACPP_URL", "http://localhost:8088/completion")
     
     payload = {
         "prompt": prompt,

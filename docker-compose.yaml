@@ -1,6 +1,43 @@
 version: "3.9"
 services:
-  llama:
+
+  demo-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile_demo_ui
+    ports:
+      - "7864:7860"
+    environment:
+      - PARSER_API_URL=http://parser-api:8088/chat
+    networks:
+      - custom_network
+    
+
+  parser-api:
+    build:
+      context: .
+      dockerfile: Dockerfile_parser_api
+    ports:
+      - "8088:8088"
+    environment:
+      - LLAMACPP_URL=http://llamacpp:8088/completion
+      - QDRANT_URL=http://qdrant:6333
+    networks:
+      - custom_network
+    
+  # qdrant-dev:
+  #   image: qdrant/qdrant
+  #   ports:
+  #     - "6643:6333"
+  #     - "6344:6334"
+  #   volumes:
+  #     - "./qdrant_storage:/qdrant/storage:z"
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 5G
+
+  llamacpp:
     image: ghcr.io/ggerganov/llama.cpp:server-cuda
     command: [
       "--model_url", "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_0.gguf",
