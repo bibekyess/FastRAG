@@ -20,7 +20,7 @@ RUN pip install gradio==4.44.1 requests==2.32.3
 # Install cpu version for lightweight Docker Image
 RUN pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 
-ARG CACHEBUST=2
+ARG CACHEBUST=3
 RUN pip install git+https://github.com/bibekyess/FastRAG.git
 
 COPY fastrag/api.py /app/api.py

@@ -35,13 +35,17 @@ def call_chat_api(user_input):
 
 
 def chat(chatbot_history):
-    print("history: ", chatbot_history)
-        
     user_input = chatbot_history[-1][0] # idx-0 --> User input
     streamer = call_chat_api(user_input)
     for chunk in streamer:
         chatbot_history[-1][1] += chunk
         yield chatbot_history
+        
+    query = chatbot_history[-1][0]
+    response_text = chatbot_history[-1][1]
+    logger.info(f"query: {query}:  {response_text}")
+    add_conversation_history(query=query, response_text=response_text)
+    
     return chatbot_history
 
 
@@ -52,18 +56,34 @@ def get_conversation_history(collection_name: str="qna_collection", limit: int=1
             "collection_name": collection_name,
             "limit": limit
         }
-        response = requests.post(url, json=payload)
-        print(response.json())
+        response = requests.get(url, params=payload)
         conversation_history = response.json()["response"]
 
+        chat_history = []
         for record in conversation_history:
-            chat_history += [[record['user'], record['assistant']]]
+            chat_history += [[record['user'], record['system']]]
         return chat_history
     except Exception as err:
         logger.warning(f"Error in accessing conversation history from database: {err}")
         return []
 
 
+def add_conversation_history(query, response_text, collection_name:str="qna_collection"):
+    try:
+        url = os.getenv("CONVERSATION_HISTORY_URL", "http://localhost:8080/conversation-history")
+        payload = {
+            "collection_name": collection_name,
+            "query": query,
+            "response_text": response_text
+        }
+        response = requests.post(url, json=payload)
+        logger.info(response.json()["message"])
+        
+    except Exception as err:
+        logger.warning(f"Failed to add to conversation history: {err}")
+        return []    
+    
+    
 def chatbot_history_collection(input_query, chat_history):
     
     if input_query is None or len(input_query) == 0:

@@ -105,12 +105,26 @@ class SearchRequest(BaseModel):
     index_id: str="files"
     dense_top_k: int=5
     
+class ConversationEntry(BaseModel):
+    collection_name: str
+    query: str
+    response_text: str
 
-@app.post("/conversation-history")
+
+@app.get("/conversation-history")
 async def get_conversation_history(collection_name: str, limit: int=10):
     conversation_history = qdrant_database.load_recent_responses(collection_name=collection_name, limit=limit)
     return {"response": conversation_history}
 
+
+@app.post("/conversation-history")
+async def add_conversation_history(entry: ConversationEntry):
+    qdrant_database.add_response(
+        collection_name=entry.collection_name,
+        query=entry.query,
+        response_text=entry.response_text
+    )
+    return {"message": "Response added to conversation history"}
 
 @app.post("/parse")
 async def parse(file: UploadFile = File(...), index_id: str="files", splitting_type: Literal['raw', 'md'] = 'raw'):
