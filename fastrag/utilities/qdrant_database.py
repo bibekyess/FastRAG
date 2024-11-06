@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 qdrant_url = os.getenv("QDRANT_URL", "http://0.0.0.0:6333")
 
 class QdrantDatabase(ABC):
-    qdrant_client: Any = QdrantClient(url=qdrant_url)
+    
+    def __init__(self, qdrant_url=qdrant_url):
+        self.qdrant_client = QdrantClient(url=qdrant_url)
     
     def create_collection(self, collection_name):
         if self.qdrant_client.collection_exists(collection_name=collection_name):

@@ -9,6 +9,7 @@ services:
       - "7864:7860"
     environment:
       - PARSER_API_URL=http://parser-api:8090/chat
+      - CONVERSATION_HISTORY_URL=http://parser-api:8090/conversation-history
     
 
   parser-api:

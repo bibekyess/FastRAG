@@ -45,21 +45,27 @@ def chat(chatbot_history):
     return chatbot_history
 
 
-def chatbot_history_collection(input_query, chat_history):
+def get_conversation_history(collection_name: str="qna_collection", limit: int=10):
     try:
-        url = "http://localhost:8080/conversation-history"
+        url = os.getenv("CONVERSATION_HISTORY_URL", "http://localhost:8080/conversation-history")
         payload = {
-            "collection_name": "qna_collection",
-            "limit": 10
+            "collection_name": collection_name,
+            "limit": limit
         }
         response = requests.post(url, json=payload)
+        print(response.json())
         conversation_history = response.json()["response"]
 
         for record in conversation_history:
             chat_history += [[record['user'], record['assistant']]]
+        return chat_history
     except Exception as err:
         logger.warning(f"Error in accessing conversation history from database: {err}")
-        
+        return []
+
+
+def chatbot_history_collection(input_query, chat_history):
+    
     if input_query is None or len(input_query) == 0:
         input_query=""
 
@@ -77,8 +83,7 @@ def run():
             elem_id="header"
         )
 
-
-        chatbot = gr.Chatbot(elem_id="chatbot-display")
+        chatbot = gr.Chatbot(elem_id="chatbot-display", value=get_conversation_history())
         input_text = gr.Textbox(
                         placeholder="Type your message...",
                         show_label=False,

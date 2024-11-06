@@ -108,7 +108,7 @@ class SearchRequest(BaseModel):
 
 @app.post("/conversation-history")
 async def get_conversation_history(collection_name: str, limit: int=10):
-    conversation_history = qdrant_database.load_recent_responses(collection_name=collection_name, limit=10)
+    conversation_history = qdrant_database.load_recent_responses(collection_name=collection_name, limit=limit)
     return {"response": conversation_history}
 
 
