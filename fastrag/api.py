@@ -10,6 +10,7 @@ from qdrant_client import QdrantClient
 from llama_index.core.schema import Document
 from typing import Dict, Any, List, Literal
 from fastrag.rag.retriever import BaseRetriever
+from fastrag.utilities.qdrant_database import QdrantDatabase
 
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,11 @@ qdrant_client = QdrantClient(url=qdrant_url, timeout=20)
 EMBED_SIZE=512
 
 embed_model = HuggingFaceEmbedding(model_name=model_name, max_length=EMBED_SIZE) # FIXME Changel max_length to consider high memory usage with bge-m3
+
+qdrant_database = QdrantDatabase()
+collection_name = "qna_collection"
+qdrant_database.create_collection(collection_name)
+
 LLM_PROMPT="""
 ## Role:
 - You are a **Document Expert** who provides answer based solely on the provided reference.
@@ -56,6 +62,25 @@ LLM_PROMPT="""
 {query_str}
 """
 
+QUERY_EXPANSION_PROMPT = """
+## Role:
+- You are an expert Teacher specializing in query clarification. 
+
+## Instructions:
+- Your task is to rephrase and restructure unclear or incomplete queries. 
+- Maintain the original intent and key elements of the question. 
+- Use **History** of user and system conversations to extract the intent of the user and rephrase the question.
+- Do not answer question - focus solely on rephrasing it for improved comprehension if **History** is provided. 
+- Important: Begin your response directly with the rephrased query, without any introductory phrases like 'Here's a rephrased version' or 'The query can be restructured as'. Your entire response should be just the rephrased query.
+
+## History:
+{history}
+
+## User query:
+{query_str}
+"""
+
+
 app = FastAPI()
 
 
@@ -71,15 +96,21 @@ class ChatRequest(BaseModel):
     index_id: str="files"
     llm_text: str="local"
     dense_top_k: int=5
+    upgrade_user_input: bool=False
     stream: bool=True
     
 
-    
 class SearchRequest(BaseModel):
     user_input: str
     index_id: str="files"
     dense_top_k: int=5
     
+
+@app.post("/conversation-history")
+async def get_conversation_history(collection_name: str, limit: int=10):
+    conversation_history = qdrant_database.load_recent_responses(collection_name=collection_name, limit=10)
+    return {"response": conversation_history}
+
 
 @app.post("/parse")
 async def parse(file: UploadFile = File(...), index_id: str="files", splitting_type: Literal['raw', 'md'] = 'raw'):
@@ -161,11 +192,20 @@ async def chat(request: ChatRequest):
     index_id = request.index_id
     llm_text = request.llm_text
     dense_top_k = request.dense_top_k
+    upgrade_user_input = request.upgrade_user_input
     stream =request.stream
     
     assert llm_text=='local'
     
     base_retriever = BaseRetriever(index_id=index_id, embed_model=embed_model, qdrant_client=qdrant_client)
+    
+    if upgrade_user_input:
+        conversation_history = qdrant_database.load_recent_responses(collection_name=collection_name, limit=5)
+        logger.info(f"Conversation History: {conversation_history}")
+        llm_prompt =QUERY_EXPANSION_PROMPT.format(history=conversation_history, query_str=user_input)
+        user_input = llamacpp_inference(llm_prompt, temperature=0.7,stream=False)
+        logger.info(f"Upgraded user_input: {user_input}")
+        
     relevant_documents = base_retriever.dense_search(user_input, top_k=dense_top_k, dense_threshold=0.2)
     
     context_str = "\n\n".join([n.node.get_content() for n in relevant_documents])

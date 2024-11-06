@@ -1,6 +1,10 @@
 import gradio as gr
 import requests
 import os
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 def call_chat_api(user_input):
@@ -42,7 +46,20 @@ def chat(chatbot_history):
 
 
 def chatbot_history_collection(input_query, chat_history):
-    print(input_query, chat_history)
+    try:
+        url = "http://localhost:8080/conversation-history"
+        payload = {
+            "collection_name": "qna_collection",
+            "limit": 10
+        }
+        response = requests.post(url, json=payload)
+        conversation_history = response.json()["response"]
+
+        for record in conversation_history:
+            chat_history += [[record['user'], record['assistant']]]
+    except Exception as err:
+        logger.warning(f"Error in accessing conversation history from database: {err}")
+        
     if input_query is None or len(input_query) == 0:
         input_query=""
 
