@@ -52,7 +52,7 @@ def chat(chatbot_history):
     elapsed_time = end_time-start_time
     logger.info(f"Chat API executed in {elapsed_time:.4f} seconds")
     
-    return chatbot_history, f"## Latency of Last Response: {elapsed_time:.4f} seconds"
+    yield chatbot_history, f"## Latency of Last Response: {elapsed_time:.4f} seconds"
 
 
 def get_conversation_history(collection_name: str="qna_collection", limit: int=10, max_retries: int=5, retry_delay: int=2):
@@ -110,7 +110,10 @@ def load_chatbot():
     history = get_conversation_history()
     return gr.update(value=history, visible=True), gr.update(visible=True), gr.update(visible=True), gr.update(visible=True), gr.update(visible=True), gr.update(visible=False)
     
-
+def dummy_return():
+    return "## Generation Stopped by User"
+    
+    
 def run():
     with gr.Blocks() as demo:
         # Header with a professional title and subtitle
@@ -168,7 +171,7 @@ def run():
             outputs=[chatbot, latency_display]
         )
         
-        stop_btn.click(fn=lambda: "## Generation Stopped by User", inputs=None, outputs=latency_display, cancels=[click_event, submit_event])
+        stop_btn.click(fn=dummy_return, outputs=[latency_display], cancels=[click_event, submit_event])
 
         
 

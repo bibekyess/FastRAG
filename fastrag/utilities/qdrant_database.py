@@ -51,6 +51,8 @@ class QdrantDatabase(ABC):
             with_payload=True
         )[0]
         
+        print(len(search_results))
+        
         return [response.payload for response in search_results[-limit:]]
     
     def delete_collection(self, collection_name):
