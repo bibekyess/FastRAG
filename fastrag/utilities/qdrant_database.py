@@ -48,11 +48,10 @@ class QdrantDatabase(ABC):
     def load_recent_responses(self, collection_name, limit: int=10):
         search_results = self.qdrant_client.scroll(
             collection_name = collection_name,
+            limit=10e16, # Retrieve every points
             with_payload=True
-        )[0]
-        
-        print(len(search_results))
-        
+        )
+        search_results = search_results[0]
         return [response.payload for response in search_results[-limit:]]
     
     def delete_collection(self, collection_name):

@@ -10,7 +10,8 @@ services:
     environment:
       - PARSER_API_URL=http://parser-api:8090/chat
       - CONVERSATION_HISTORY_URL=http://parser-api:8090/conversation-history
-    
+    volumes:
+      - ./logs:/app/logs 
 
   parser-api:
     build:

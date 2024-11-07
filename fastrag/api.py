@@ -27,10 +27,10 @@ file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
 # Set up stream handler to print logs to the terminal
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.INFO)
-stream_handler.setFormatter(formatter)
-logger.addHandler(stream_handler)
+# stream_handler = logging.StreamHandler()
+# stream_handler.setLevel(logging.INFO)
+# stream_handler.setFormatter(formatter)
+# logger.addHandler(stream_handler)
 
 
 qdrant_url = os.getenv("QDRANT_URL", "http://0.0.0.0:6333")
@@ -154,7 +154,7 @@ async def parse(file: UploadFile = File(...), index_id: str="files", splitting_t
     return base_retriever.add_documents_to_index(documents=documents, index_id=index_id)
 
 
-def llamacpp_inference(prompt, n_predict=128, temperature=0.7, top_p=0.95, stop=None, stream=True):
+def llamacpp_inference(prompt, n_predict=512, temperature=0.7, top_p=0.95, stop=None, stream=True):
     url = os.getenv("LLAMACPP_URL", "http://localhost:8088/completion")
     
     payload = {
@@ -220,11 +220,11 @@ async def chat(request: ChatRequest):
     passed_llm_prompt = LLM_PROMPT.format(context_str=context_str, query_str=user_input)
     logger.info(f"passed llm prompt: {str(passed_llm_prompt)}")
     if stream:
-        streamer = llamacpp_inference(passed_llm_prompt, n_predict=200, temperature=0.3, stream=stream)
+        streamer = llamacpp_inference(passed_llm_prompt, n_predict=512, temperature=0.4, stream=stream)
 
         return StreamingResponse(streamer, media_type="text/plain")
     else:
-        response = llamacpp_inference(passed_llm_prompt, n_predict=200, temperature=0.3, stream=stream)
+        response = llamacpp_inference(passed_llm_prompt, n_predict=512, temperature=0.4, stream=stream)
         return {'response': response}
     
 

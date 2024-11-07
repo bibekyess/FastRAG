@@ -4,11 +4,27 @@ import os
 import logging
 import time
 from time import perf_counter
+from datetime import datetime
+
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
+def log_to_file(question, response, latency):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    log_entry = f"Timestamp: {timestamp}\n"
+    log_entry += f"Question: {question}\n"
+    log_entry += f"Response: {response}\n"
+    log_entry += f"Latency: {latency:.4f} seconds\n"
+    log_entry += "-" * 50 + "\n"
+    
+    # append mode
+    with open("./logs/chatbot_log.txt", "a") as file:
+        file.write(log_entry)
+        
+    
 def call_chat_api(user_input):
     url = os.getenv("PARSER_API_URL", "http://localhost:8080/chat")
     headers = {
@@ -20,6 +36,7 @@ def call_chat_api(user_input):
         "index_id": "files",
         "llm_text": "local",
         "dense_top_k": 4,
+        "upgrade_user_input": True,
         "stream": True
     }
 
@@ -51,6 +68,9 @@ def chat(chatbot_history):
     end_time = perf_counter()
     elapsed_time = end_time-start_time
     logger.info(f"Chat API executed in {elapsed_time:.4f} seconds")
+    
+    # Log the results to a .txt file
+    log_to_file(query, response_text, elapsed_time)
     
     yield chatbot_history, f"## Latency of Last Response: {elapsed_time:.4f} seconds"
 
