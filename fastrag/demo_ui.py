@@ -2,6 +2,8 @@ import gradio as gr
 import requests
 import os
 import logging
+import time
+from time import perf_counter
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -35,38 +37,51 @@ def call_chat_api(user_input):
 
 
 def chat(chatbot_history):
+    start_time = perf_counter()
     user_input = chatbot_history[-1][0] # idx-0 --> User input
     streamer = call_chat_api(user_input)
     for chunk in streamer:
         chatbot_history[-1][1] += chunk
-        yield chatbot_history
+        yield chatbot_history, "## Calculating Latency ..."
         
     query = chatbot_history[-1][0]
     response_text = chatbot_history[-1][1]
     logger.info(f"query: {query}:  {response_text}")
     add_conversation_history(query=query, response_text=response_text)
+    end_time = perf_counter()
+    elapsed_time = end_time-start_time
+    logger.info(f"Chat API executed in {elapsed_time:.4f} seconds")
     
-    return chatbot_history
+    return chatbot_history, f"## Latency of Last Response: {elapsed_time:.4f} seconds"
 
 
-def get_conversation_history(collection_name: str="qna_collection", limit: int=10):
-    try:
-        url = os.getenv("CONVERSATION_HISTORY_URL", "http://localhost:8080/conversation-history")
-        payload = {
-            "collection_name": collection_name,
-            "limit": limit
-        }
-        response = requests.get(url, params=payload)
-        conversation_history = response.json()["response"]
+def get_conversation_history(collection_name: str="qna_collection", limit: int=10, max_retries: int=5, retry_delay: int=2):
+    retries = 0
+    while retries < max_retries:
+        try:
+            url = os.getenv("CONVERSATION_HISTORY_URL", "http://localhost:8080/conversation-history")
+            payload = {
+                "collection_name": collection_name,
+                "limit": limit
+            }
+            response = requests.get(url, params=payload)
+            logger.info(f"JSON Response from Conversation History: {response.json()}")
+            conversation_history = response.json()["response"]
 
-        chat_history = []
-        for record in conversation_history:
-            chat_history += [[record['user'], record['system']]]
-        return chat_history
-    except Exception as err:
-        logger.warning(f"Error in accessing conversation history from database: {err}")
-        return []
-
+            chat_history = []
+            for record in conversation_history:
+                chat_history += [[record['user'], record['system']]]
+            return chat_history
+        except Exception as err:
+            logger.warning(f"Error in accessing conversation history from database: {err}")
+            retries += 1
+            if retries < max_retries:
+                logger.warning(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2
+            else:
+                logger.error(f"Failed to get conversation history after {max_retries} attempts.")
+                return []
 
 def add_conversation_history(query, response_text, collection_name:str="qna_collection"):
     try:
@@ -91,6 +106,10 @@ def chatbot_history_collection(input_query, chat_history):
 
     return "", chat_history + [[input_query, '']]
 
+def load_chatbot():
+    history = get_conversation_history()
+    return gr.update(value=history, visible=True), gr.update(visible=True), gr.update(visible=True), gr.update(visible=True), gr.update(visible=True), gr.update(visible=False)
+    
 
 def run():
     with gr.Blocks() as demo:
@@ -102,22 +121,31 @@ def run():
             """,
             elem_id="header"
         )
+        loading_indicator = gr.Markdown("## Loading Parser API...", visible=True, elem_id="loading-indicator")
 
-        chatbot = gr.Chatbot(elem_id="chatbot-display", value=get_conversation_history())
+        chatbot = gr.Chatbot(elem_id="chatbot-display", visible=False)
         input_text = gr.Textbox(
                         placeholder="Type your message...",
                         show_label=False,
                         lines=1,
-                        elem_id="user-input"
+                        elem_id="user-input",
+                        visible=False
                     )
-        
+            
         with gr.Row():
-            clear_submit_btn = gr.ClearButton(visible=True)
-            input_submit_btn= gr.Button("Submit", visible=True)
-            stop_btn = gr.Button("Stop", visible=True)
+            clear_submit_btn = gr.ClearButton(visible=False)
+            input_submit_btn= gr.Button("Submit", visible=False)
+            stop_btn = gr.Button("Stop", visible=False)
 
+        latency_display = gr.Markdown("", elem_id="latency-display")
+
+        demo.load(
+            load_chatbot,
+            outputs=[chatbot, input_text, clear_submit_btn, input_submit_btn, stop_btn, loading_indicator]
+        )
+        
         clear_submit_btn.add(
-            components=[chatbot, input_text]
+            components=[chatbot, input_text, latency_display]
         )
         
         submit_event = input_text.submit(
@@ -127,7 +155,7 @@ def run():
         ).then(
             fn = chat,
             inputs = [chatbot],
-            outputs=[chatbot]
+            outputs=[chatbot, latency_display]
         )
         
         click_event = input_submit_btn.click(
@@ -137,10 +165,10 @@ def run():
         ).then(
             fn = chat,
             inputs = [chatbot],
-            outputs=[chatbot]
+            outputs=[chatbot, latency_display]
         )
         
-        stop_btn.click(fn=None, inputs=None, outputs=None, cancels=[click_event, submit_event])
+        stop_btn.click(fn=lambda: "## Generation Stopped by User", inputs=None, outputs=latency_display, cancels=[click_event, submit_event])
 
         
 
@@ -178,6 +206,24 @@ def run():
 
     #send-button:hover {
         background-color: #004080;
+    }
+    
+    
+    #loading-indicator {
+        font-weight: bold;
+        color: #3498db; /* Soft blue for loading text */
+        text-align: center;
+        margin-top: 8em;
+        margin-bottom: 1em;
+    }
+    
+    #latency-display {
+        border: 1px solid #dedede;
+        border-radius: 8px;
+        background-color: #f7f8fa;
+        padding: 20px;
+        color: #333333;
+        font-family: Arial, sans-serif;
     }
     """
 

@@ -7,9 +7,9 @@ from typing import Callable
 
 def get_execution_time(func, level="INFO"):
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    async def wrapper(*args, **kwargs):
         start_time = perf_counter()
-        result = func(*args, **kwargs)
+        result = await func(*args, **kwargs)
         end_time = perf_counter()
         duration = end_time - start_time
         log_fcn = getattr(logging, level.lower())

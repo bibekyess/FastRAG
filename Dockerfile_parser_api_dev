@@ -1,0 +1,35 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Install packages
+RUN apt-get update && \
+    apt-get install -y bash \
+                       git \
+                       curl \
+                       ca-certificates && \
+    apt-get install -y --no-install-recommends \
+                       build-essential \
+                       pkg-config \
+                       python3-dev \
+                       pandoc && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install gradio==4.44.1 requests==2.32.3
+
+# Install cpu version for lightweight Docker Image
+RUN pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+
+ARG CACHEBUST=3
+RUN pip install git+https://github.com/bibekyess/FastRAG.git
+COPY ./fastrag /app/fastrag
+COPY ./poetry.lock /app/poetry.lock
+COPY ./pyproject.toml /app/pyproject.toml
+COPY ./README.md /app/README.md
+RUN pip install -e .
+
+EXPOSE 7860
+
+ENTRYPOINT ["uvicorn", "fastrag.api:app", "--host", "0.0.0.0", "--port", "8090", "--reload"]
+
+

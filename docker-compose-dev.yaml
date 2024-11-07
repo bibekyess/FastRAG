@@ -1,0 +1,61 @@
+version: "3.9"
+services:
+
+  demo-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile_demo_ui
+    ports:
+      - "7864:7860"
+    environment:
+      - PARSER_API_URL=http://parser-api:8090/chat
+      - CONVERSATION_HISTORY_URL=http://parser-api:8090/conversation-history
+    
+
+  parser-api:
+    build:
+      context: .
+      dockerfile: Dockerfile_parser_api_dev
+    ports:
+      - "8089:8090"
+    environment:
+      - LLAMACPP_URL=http://llamacpp:8080/completion
+      # - API_PORT=8090
+      - QDRANT_URL=http://qdrant:6333
+    volumes:
+      - ./fastrag:/app/fastrag
+    
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6643:6333"
+      - "6344:6334"
+    volumes:
+      - "./qdrant_storage:/qdrant/storage:z"
+    deploy:
+      resources:
+        limits:
+          memory: 5G
+
+  llamacpp:
+    image: ghcr.io/ggerganov/llama.cpp:server-cuda
+    command: [
+      "--model_url", "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_0.gguf",
+      "--port", "8080",
+      "--host", "0.0.0.0",
+      "-n", "2048",
+      "--n-gpu-layers", "-1"
+    ]
+    volumes:
+      - ./models:/models
+    ports:
+      - "8088:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  

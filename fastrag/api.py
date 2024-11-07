@@ -7,11 +7,11 @@ from fastapi import FastAPI
 import tempfile, shutil
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from qdrant_client import QdrantClient
-from llama_index.core.schema import Document
-from typing import Dict, Any, List, Literal
+from typing import Any, List, Literal
 from fastrag.rag.retriever import BaseRetriever
 from fastrag.utilities.qdrant_database import QdrantDatabase
-
+import requests
+import json
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -32,64 +32,54 @@ stream_handler.setLevel(logging.INFO)
 stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 
+
 qdrant_url = os.getenv("QDRANT_URL", "http://0.0.0.0:6333")
 model_name = "BAAI/bge-m3"
 qdrant_client = QdrantClient(url=qdrant_url, timeout=20)
 EMBED_SIZE=512
 
-embed_model = HuggingFaceEmbedding(model_name=model_name, max_length=EMBED_SIZE) # FIXME Changel max_length to consider high memory usage with bge-m3
 
+embed_model = HuggingFaceEmbedding(model_name=model_name, max_length=EMBED_SIZE) # FIXME Changel max_length to consider high memory usage with bge-m3
 qdrant_database = QdrantDatabase()
 collection_name = "qna_collection"
 qdrant_database.create_collection(collection_name)
 
-LLM_PROMPT="""
-## Role:
-- You are a **Document Expert** who provides answer based solely on the provided reference.
 
-## Instructions:
+LLM_PROMPT = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+You are a Document Expert who provides answers based solely on provided references. Follow these instructions:
 - Check if the references are relevant to the user query.
-- If the retrieved information is relevant, provide the answer.
-- If the retrieved information is not relevant, or the question does not make sense given the retrieved information, reply that 'It cannot be answered based on the material'.
-- Be Precise and provide only the answer, no other comments.
-- Please provide a gramatically complete responses with ending punctuations.
-- Let’s think step by step.
+- If relevant, provide a precise answer with complete grammar and punctuation.
+- If not relevant or the question doesn't make sense given the information, reply: 'It cannot be answered based on the material'.
+- Provide only the answer, no other comments.
+- Think step by step when formulating your response.
+<|eot_id|><|start_header_id|>user<|end_header_id|>
 
 ## References:
 {context_str}
 
 ## User query: 
 {query_str}
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 """
 
-QUERY_EXPANSION_PROMPT = """
-## Role:
-- You are an expert Teacher specializing in query clarification. 
+QUERY_EXPANSION_PROMPT = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 
-## Instructions:
+You are an expert Teacher specializing in query clarification. Follow these instructions:
 - Your task is to rephrase and restructure unclear or incomplete queries. 
 - Maintain the original intent and key elements of the question. 
 - Use **History** of user and system conversations to extract the intent of the user and rephrase the question.
 - Do not answer question - focus solely on rephrasing it for improved comprehension if **History** is provided. 
 - Important: Begin your response directly with the rephrased query, without any introductory phrases like 'Here's a rephrased version' or 'The query can be restructured as'. Your entire response should be just the rephrased query.
+<|eot_id|><|start_header_id|>user<|end_header_id|>
 
 ## History:
 {history}
 
 ## User query:
 {query_str}
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 """
-
-
-app = FastAPI()
-
-
-async def text_streamer(streamer, extra_text: str = ""):
-    for new_text in streamer:
-        yield new_text.delta  # Yielding the streamed text
-    if extra_text:
-        yield extra_text
-
 
 class ChatRequest(BaseModel):
     user_input: str
@@ -99,16 +89,29 @@ class ChatRequest(BaseModel):
     upgrade_user_input: bool=False
     stream: bool=True
     
-
 class SearchRequest(BaseModel):
     user_input: str
     index_id: str="files"
     dense_top_k: int=5
-    
+
 class ConversationEntry(BaseModel):
     collection_name: str
     query: str
     response_text: str
+
+
+class AnswerSchema(BaseModel):
+    text: Any
+    source_nodes: List[Any]
+    
+
+app = FastAPI()
+
+async def text_streamer(streamer, extra_text: str = ""):
+    for new_text in streamer:
+        yield new_text.delta  # Yielding the streamed text
+    if extra_text:
+        yield extra_text
 
 
 @app.get("/conversation-history")
@@ -125,6 +128,7 @@ async def add_conversation_history(entry: ConversationEntry):
         response_text=entry.response_text
     )
     return {"message": "Response added to conversation history"}
+
 
 @app.post("/parse")
 async def parse(file: UploadFile = File(...), index_id: str="files", splitting_type: Literal['raw', 'md'] = 'raw'):
@@ -148,15 +152,7 @@ async def parse(file: UploadFile = File(...), index_id: str="files", splitting_t
     base_retriever = BaseRetriever(index_id=index_id, embed_model=embed_model, qdrant_client=qdrant_client)
     base_retriever.delete_index(index_id=index_id)
     return base_retriever.add_documents_to_index(documents=documents, index_id=index_id)
-            
-    
-class AnswerSchema(BaseModel):
-    text: Any
-    source_nodes: List[Any]
-    
 
-import requests
-import json
 
 def llamacpp_inference(prompt, n_predict=128, temperature=0.7, top_p=0.95, stop=None, stream=True):
     url = os.getenv("LLAMACPP_URL", "http://localhost:8088/completion")
@@ -174,7 +170,6 @@ def llamacpp_inference(prompt, n_predict=128, temperature=0.7, top_p=0.95, stop=
         "Content-Type": "application/json"
     }
     
-    # Handle streaming response
     def handle_streaming():
         with requests.post(url, headers=headers, json=payload, stream=True) as response:
             response.raise_for_status()
@@ -183,11 +178,10 @@ def llamacpp_inference(prompt, n_predict=128, temperature=0.7, top_p=0.95, stop=
                     try:
                         # Remove "data: " prefix and parse JSON
                         data = json.loads(line[6:])
-                        yield data.get("content", "")  # Yield the "content" field
+                        yield data.get("content", "")
                     except json.JSONDecodeError:
                         print("Failed to decode JSON:", line)
 
-    # Handle non-streaming response
     def handle_non_streaming():
         response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()
@@ -233,7 +227,7 @@ async def chat(request: ChatRequest):
         response = llamacpp_inference(passed_llm_prompt, n_predict=200, temperature=0.3, stream=stream)
         return {'response': response}
     
-        
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv('API_PORT', 8090)))
