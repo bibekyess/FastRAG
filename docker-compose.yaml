@@ -8,7 +8,7 @@ services:
     ports:
       - "7864:7860"
     environment:
-      - PARSER_API_URL=http://parser-api:8090/chat
+      - PARSER_API_URL=http://parser-api:8090
       - CONVERSATION_HISTORY_URL=http://parser-api:8090/conversation-history
     volumes:
       - ./logs:/app/logs 
